@@ -29,7 +29,9 @@ class TaskTracker:
 
         end_time = time.time()
         elapsed_time = end_time - self.start_time
-        print(f"{Fore.GREEN}Stopped tracking task {self.task_id}. Time spent: {elapsed_time} seconds{Style.RESET_ALL}")
+        hours, rem = divmod(elapsed_time, 3600)
+        minutes, seconds = divmod(rem, 60)
+        print(f"{Fore.GREEN}Stopped tracking task {self.task_id}. Time spent: {int(hours)} hours, {int(minutes)} minutes, and {seconds:.2f} seconds{Style.RESET_ALL}")
 
         response = requests.put(f"http://localhost:3000/api/tasks/{self.task_id}/trackedTime", 
                                 json={'startTime': self.start_time, 'endTime': end_time, 'duration': elapsed_time})
