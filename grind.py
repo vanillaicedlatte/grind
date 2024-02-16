@@ -104,7 +104,7 @@ class TaskTracker:
             due_date = task_details['dueDate']
             org_id = task_details['orgId']
 
-            headers = {'Authorization': 'Bearer sk_test_0PPcPmzue0NuCAoFA1S31iII32tiUBQ3Iml1fDpqAK'}
+            headers = {'Authorization': 'Bearer API_KEY'}
             org_details_url = f"https://api.clerk.com/v1/organizations/{org_id}"
             org_details_response = requests.get(org_details_url, headers=headers)
             if org_details_response.status_code == 200:
