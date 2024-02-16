@@ -31,10 +31,29 @@ class TaskTracker:
         elapsed_time = end_time - self.start_time
         hours, rem = divmod(elapsed_time, 3600)
         minutes, seconds = divmod(rem, 60)
-        print(f"{Fore.GREEN}Stopped tracking task {self.task_id}. Time spent: {int(hours)} hours, {int(minutes)} minutes, and {seconds:.2f} seconds{Style.RESET_ALL}")
 
+        # 1. Fetch task details from localhost API
+        task_details_url = f"http://localhost:3000/api/tasks/{self.task_id}"
+        task_details_response = requests.get(task_details_url)
+
+        if task_details_response.status_code == 200:
+            task_details = task_details_response.json()
+            task_name = task_details['name']
+            description = task_details['description'] 
+            due_date = task_details['dueDate'] 
+        else:
+            print(f"{Fore.RED}Failed to fetch task details.{Style.RESET_ALL}")
+            # Add suitable error handling here
+        
+        self.start_time = None
+        self.task_id = None
+        os.remove(self.task_file)
+    # 3. Your original API calls to localhost:3000  
         response = requests.put(f"http://localhost:3000/api/tasks/{self.task_id}/trackedTime", 
-                                json={'startTime': self.start_time, 'endTime': end_time, 'duration': elapsed_time})
+                                    json={'startTime': self.start_time, 'endTime': end_time, 'duration': elapsed_time})
+
+        update_response = requests.post(f"http://localhost:3000/api/tasks/{self.task_id}/updates", 
+                                json={'timestamp': end_time, 'details': 'Tracked time added'})
 
         if response.status_code == 200:
             print(f"{Fore.GREEN}Successfully updated task with time spent.{Style.RESET_ALL}")
@@ -43,11 +62,8 @@ class TaskTracker:
             print(f"Status code: {response.status_code}")
             print(f"Response body: {response.text}")
 
-        self.start_time = None
-        self.task_id = None
-        os.remove(self.task_file)
-
-    def update_status(self, task_id, status_code):
+    #  Your existing update_status function (Make sure it's defined if you didn't remove it) 
+    def update_status(self, task_id, status_code, duration=None):
         status_mapping = {
             'a': 'Approved',
             'ip': 'In Progress',
@@ -61,8 +77,8 @@ class TaskTracker:
 
         status = status_mapping[status_code]
 
+        # Example API call to update the task status, adjust as necessary
         response = requests.put(f"http://localhost:3000/api/tasks/{task_id}/details", json={'status': status})
-
         if response.status_code == 200:
             print(f"{Fore.GREEN}Successfully updated task status to {status}.{Style.RESET_ALL}")
         else:
@@ -70,6 +86,57 @@ class TaskTracker:
             print(f"Status code: {response.status_code}")
             print(f"Response body: {response.text}")
 
+        if status_code == 'a':  # Check if status is 'Approved'
+            # Fetch task details to send to the webhook
+            task_details_url = f"http://localhost:3000/api/tasks/{task_id}"
+            task_details_response = requests.get(task_details_url)
+            if task_details_response.status_code == 200:
+                task_details = task_details_response.json()
+                task_name = task_details['name']
+                description = task_details.get('description', '')  # Default to empty string if not found
+                due_date = task_details['dueDate']
+                # Use the duration argument directly if it's in the correct format, or format it as needed
+                formatted_time = duration  # Assuming duration is a string like "3h"
+                self.send_to_webhook(task_id, formatted_time)
+            else:
+                print(f"{Fore.RED}Failed to fetch task details for webhook.{Style.RESET_ALL}")
+
+    def send_to_webhook(self, task_id, formatted_time):
+        # Fetch task details first to get orgId
+        task_details_url = f"http://localhost:3000/api/tasks/{task_id}"
+        task_details_response = requests.get(task_details_url)
+        if task_details_response.status_code == 200:
+            task_details = task_details_response.json()
+            task_name = task_details['name']
+            description = task_details.get('description', '')
+            due_date = task_details['dueDate']
+            org_id = task_details['orgId']
+
+            # Now, fetch organization details using orgId
+            headers = {'Authorization': 'Bearer sk_test_0PPcPmzue0NuCAoFA1S31iII32tiUBQ3Iml1fDpqAK'}
+            org_details_url = f"https://api.clerk.com/v1/organizations/{org_id}"
+            org_details_response = requests.get(org_details_url, headers=headers)
+            if org_details_response.status_code == 200:
+                org_details = org_details_response.json()
+                org_name = org_details['name']
+
+                # Prepare the data for the webhook, including the organization name
+                task_data = {
+                    "name": f"☕ {task_name} (duration: {formatted_time}, due: {due_date})",
+                    "notes": description,
+                    "organization": org_name
+                }
+                print(f"Sending to webhook: {task_data}")
+                webhook_url = "https://hook.us1.make.com/jhvga65nrhtni632jkd4zq5ybedyr44d"
+                webhook_response = requests.post(webhook_url, json=task_data)
+                if webhook_response.status_code == 200:
+                    print(f"Successfully sent task creation webhook.")
+                else:
+                    print(f"Failed to send task creation webhook. Status code: {webhook_response.status_code}")
+            else:
+                print(f"Failed to fetch organization details. Status code: {org_details_response.status_code}")
+        else:
+            print(f"Failed to fetch task details. Status code: {task_details_response.status_code}")
 
 def main():
     task_tracker = TaskTracker()
@@ -77,7 +144,8 @@ def main():
     parser = argparse.ArgumentParser(prog='grind')
     parser.add_argument('task_id', type=str, nargs='?', help='The ID of the task to track')
     parser.add_argument('command', choices=['start', 'stop', 'status'], help='Whether to start or stop tracking or update status')
-    parser.add_argument('status', type=str, nargs='?', help='The status to update the task to')
+    parser.add_argument('status', type=str, nargs='?', default=None, help='The status to update the task to')
+    parser.add_argument('-d', '--duration', type=str, help='Duration of the task, used when updating status to Approved')
 
     args = parser.parse_args()
 
@@ -92,7 +160,7 @@ def main():
         if args.task_id is None or args.status is None:
             print(f"{Fore.RED}Please provide a task ID and a status to update.{Style.RESET_ALL}")
         else:
-            task_tracker.update_status(args.task_id, args.status)
+            task_tracker.update_status(args.task_id, args.status, args.duration)
 
 if __name__ == "__main__":
     main()
