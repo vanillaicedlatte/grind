@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 import requests
 import time
@@ -32,7 +31,6 @@ class TaskTracker:
         hours, rem = divmod(elapsed_time, 3600)
         minutes, seconds = divmod(rem, 60)
 
-        # 1. Fetch task details from localhost API
         task_details_url = f"http://localhost:3000/api/tasks/{self.task_id}"
         task_details_response = requests.get(task_details_url)
 
@@ -43,12 +41,11 @@ class TaskTracker:
             due_date = task_details['dueDate'] 
         else:
             print(f"{Fore.RED}Failed to fetch task details.{Style.RESET_ALL}")
-            # Add suitable error handling here
         
         self.start_time = None
         self.task_id = None
         os.remove(self.task_file)
-    # 3. Your original API calls to localhost:3000  
+
         response = requests.put(f"http://localhost:3000/api/tasks/{self.task_id}/trackedTime", 
                                     json={'startTime': self.start_time, 'endTime': end_time, 'duration': elapsed_time})
 
@@ -62,7 +59,6 @@ class TaskTracker:
             print(f"Status code: {response.status_code}")
             print(f"Response body: {response.text}")
 
-    #  Your existing update_status function (Make sure it's defined if you didn't remove it) 
     def update_status(self, task_id, status_code, duration=None):
         status_mapping = {
             'a': 'Approved',
@@ -77,7 +73,6 @@ class TaskTracker:
 
         status = status_mapping[status_code]
 
-        # Example API call to update the task status, adjust as necessary
         response = requests.put(f"http://localhost:3000/api/tasks/{task_id}/details", json={'status': status})
         if response.status_code == 200:
             print(f"{Fore.GREEN}Successfully updated task status to {status}.{Style.RESET_ALL}")
@@ -86,23 +81,20 @@ class TaskTracker:
             print(f"Status code: {response.status_code}")
             print(f"Response body: {response.text}")
 
-        if status_code == 'a':  # Check if status is 'Approved'
-            # Fetch task details to send to the webhook
+        if status_code == 'a':
             task_details_url = f"http://localhost:3000/api/tasks/{task_id}"
             task_details_response = requests.get(task_details_url)
             if task_details_response.status_code == 200:
                 task_details = task_details_response.json()
                 task_name = task_details['name']
-                description = task_details.get('description', '')  # Default to empty string if not found
+                description = task_details.get('description', '') 
                 due_date = task_details['dueDate']
-                # Use the duration argument directly if it's in the correct format, or format it as needed
-                formatted_time = duration  # Assuming duration is a string like "3h"
+                formatted_time = duration  
                 self.send_to_webhook(task_id, formatted_time)
             else:
                 print(f"{Fore.RED}Failed to fetch task details for webhook.{Style.RESET_ALL}")
 
     def send_to_webhook(self, task_id, formatted_time):
-        # Fetch task details first to get orgId
         task_details_url = f"http://localhost:3000/api/tasks/{task_id}"
         task_details_response = requests.get(task_details_url)
         if task_details_response.status_code == 200:
@@ -112,7 +104,6 @@ class TaskTracker:
             due_date = task_details['dueDate']
             org_id = task_details['orgId']
 
-            # Now, fetch organization details using orgId
             headers = {'Authorization': 'Bearer sk_test_0PPcPmzue0NuCAoFA1S31iII32tiUBQ3Iml1fDpqAK'}
             org_details_url = f"https://api.clerk.com/v1/organizations/{org_id}"
             org_details_response = requests.get(org_details_url, headers=headers)
@@ -120,7 +111,6 @@ class TaskTracker:
                 org_details = org_details_response.json()
                 org_name = org_details['name']
 
-                # Prepare the data for the webhook, including the organization name
                 task_data = {
                     "name": f"☕ {task_name} (duration: {formatted_time}, due: {due_date})",
                     "notes": description,
